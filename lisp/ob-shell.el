@@ -240,7 +240,8 @@ return the value of the last statement in BODY."
 	      (with-temp-buffer
 		(call-process-shell-command
 		 (concat (if shebang script-file
-			   (format "%s %s" shell-file-name script-file))
+			   (format "%s %s" shell-file-name
+				   (file-local-name script-file)))
 			 (and cmdline (concat " " cmdline)))
 		 stdin-file
 		 (current-buffer))
