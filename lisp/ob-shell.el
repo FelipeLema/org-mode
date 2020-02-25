@@ -238,11 +238,15 @@ return the value of the last statement in BODY."
 	      (set-file-modes script-file #o755)
 	      (with-temp-file stdin-file (insert (or stdin "")))
 	      (with-temp-buffer
-		(call-process-shell-command
-		 (concat (if shebang script-file
-			   (format "%s %s" shell-file-name
-				   (file-local-name script-file)))
-			 (and cmdline (concat " " cmdline)))
+		;; TODO felipe: correct default-directory here to :dir
+		(process-file-shell-command
+		 (concat
+		  (let ((local-script-file (org-babel-local-file-name
+					    script-file)))
+		    (if shebang local-script-file
+		      (format "%s %s" shell-file-name
+			      local-script-file)))
+		  (and cmdline (concat " " cmdline)))
 		 stdin-file
 		 (current-buffer))
 		(buffer-string))))
@@ -276,7 +280,7 @@ return the value of the last statement in BODY."
 		(when padline (insert "\n"))
 		(insert body))
 	      (set-file-modes script-file #o755)
-	      (org-babel-eval script-file "")))
+	      (org-babel-eval (org-babel-local-file-name script-file) "")))
 	   (t (org-babel-eval shell-file-name (org-trim body))))))
     (when value-is-exit-status
       (setq results (car (reverse (split-string results "\n" t)))))
