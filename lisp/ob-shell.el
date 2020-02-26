@@ -212,7 +212,6 @@ var of the same value."
 If RESULT-TYPE equals `output' then return a list of the outputs
 of the statements in BODY, if RESULT-TYPE equals `value' then
 return the value of the last statement in BODY."
-  ;; TODO felipel when is :dir handled?
   (let* ((shebang (cdr (assq :shebang params)))
 	 (value-is-exit-status
 	  (member "value" (cdr (assq :result-params params))))
@@ -229,7 +228,6 @@ return the value of the last statement in BODY."
 	      (set-file-modes script-file #o755)
 	      (with-temp-file stdin-file (insert (or stdin "")))
 	      (with-temp-buffer
-		;; TODO felipe: correct default-directory here to :dir
 		(process-file-shell-command
 		 (concat
 		  (let ((local-script-file (org-babel-local-file-name
@@ -271,10 +269,10 @@ return the value of the last statement in BODY."
 		(when padline (insert "\n"))
 		(insert body))
 	      (set-file-modes script-file #o755)
-	      (org-babel-eval script-file "")))
+	      ;; (maybe remotely) run this script as a command
+	      (org-babel-eval (org-babel-local-file-name script-file) "")))
 	   (t (org-babel-eval
 	       shell-file-name
-	       ;; TODO felipe ↑ this needs to handle tramp prefix
 	       (org-trim body))))))
     (when value-is-exit-status
       (setq results (car (reverse (split-string results "\n" t)))))

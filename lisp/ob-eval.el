@@ -105,13 +105,11 @@ function in various versions of Emacs.
       (write-region start end input-file)
       (delete-region start end)
       (setq exit-status
-	    (process-file
-	     ;; TODO felipe switch tramp prefix on these two
-	     shell-file-name input-file
-	     (if error-file
-		 (list t error-file)
-	       t)
-	     nil shell-command-switch command))
+	    (process-file shell-file-name input-file
+			  (if error-file
+			      (list t error-file)
+			    t)
+			  nil shell-command-switch command))
       (when swap (exchange-point-and-mark)))
 
     (when (and input-file (file-exists-p input-file)
