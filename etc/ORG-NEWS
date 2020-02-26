@@ -12,6 +12,54 @@ Please send Org bug reports to mailto:emacs-orgmode@gnu.org.
 
 * Version 9.4 (not yet released)
 ** Incompatible changes
+*** Possibly broken internal file links: please check and fix
+
+A bug has been affecting internal links to headlines, like
+
+: [[*Headline][A link to a headline]]
+
+Storing a link to a headline may have been broken in your setup and
+those links may appear as
+
+: [[*TODO Headline][A link to a headline]]
+
+Following the link above will result in an error: the TODO keyword
+should not be part of internal file links.
+
+You can use the following command to fix links in an Org buffer:
+
+#+begin_src emacs-lisp
+(defun org-fix-links ()
+  "Fix ill-formatted internal links.
+E.g. replace [[*TODO Headline][headline]] by [[*Headline][headline]].
+Go through the buffer and ask for the replacement."
+  (interactive)
+  (visible-mode 1)
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward
+	    (format "\\[\\[\\*%s\\s-+" (regexp-opt org-todo-keywords-1 t))
+	    nil t)
+      (when (y-or-n-p "Fix link (remove TODO keyword)? ")
+	(replace-match "[[*"))))
+  (visible-mode -1))
+#+end_src
+
+*** Calling conventions changes when opening or exporting custom links
+
+This changes affects export back-ends, and libraries providing new
+link types.
+
+Function used in ~:follow~ link parameter is required to accept a
+second argument.  Likewise, function used in ~:export~ parameter needs
+to accept a fourth argument.  See ~org-link-set-parameters~ for
+details.
+
+Eventually, the function ~org-export-custom-protocol-maybe~ is now
+called with a fourth argument.  Even though the 3-arguments definition
+is still supported, at least for now, we encourage back-end developers
+to switch to the new signature.
+
 *** Python session return values must be top-level expression statements
 
 Python blocks with ~:session :results value~ header arguments now only
@@ -19,21 +67,6 @@ return a value if the last line is a top-level expression statement,
 otherwise the result is None. Also, None will now show up under
 "#+RESULTS:", as it already did with ~:results value~ for non-session
 blocks.
-
-*** Calling conventions changes when opening or exporting custom links
-
-This changes affects export back-ends, and libraries providing new
-link types.
-
-Function used in ~:follow~ link parameter is required to accept
-a second argument.  Likewise, function used in ~:export~ parameter
-needs to accept a fourth argument.  See ~org-link-set-parameters~ for
-details.
-
-Eventually, the function ~org-export-custom-protocol-maybe~ is now
-called with a fourth argument.  Even though the 3-arguments definition
-is still supported, at least for now, we encourage back-end developers
-to switch to the new signature.
 
 *** In HTML export, change on how outline-container-* is set
 
@@ -44,15 +77,28 @@ resulting <div> will be ~<div id="outline-container-my-headline">~.
 You may want to check whether your HTML files are rendered differently
 after this change.
 
+** New default settings for some options
+
+These options now defaults to =t=:
+
+- ~org-loop-over-headlines-in-active-region~
+- ~org-fontify-done-headline~
+- ~org-src-tab-acts-natively~
+
+You may want to read the docstrings of these options to understand the
+consequences of this change.
+
 ** New features
 
 *** Looping agenda commands over headlines
 
 ~org-agenda-loop-over-headlines-in-active-region~ allows you to loop
-agenda commands over the active region.  When set to =t=, loop over
-all headlines.  When set to ='start-level=, loop over headlines with
-the same level than the first headline in the region.  When set to a
-string, loop over lines matching this regular expression.
+agenda commands over the active region.
+
+When set to =t= (the default), loop over all headlines.  When set to
+='start-level=, loop over headlines with the same level than the first
+headline in the region.  When set to a string, loop over lines
+matching this regular expression.
 
 *** New minor mode ~org-table-header-line-mode~
 
@@ -206,9 +252,9 @@ group new datetime entries by month.
 
 *** New option to show source buffers using "plain" display-buffer
 
-Added option ~plain~ to ~org-src-window-setup~ to show source buffers
-using ~display-buffer~. This allows users to control how source
-buffers are displayed by modifying ~display-buffer-alist~ or
+There is a new option ~plain~ to ~org-src-window-setup~ to show source
+buffers using ~display-buffer~.  This allows users to control how
+source buffers are displayed by modifying ~display-buffer-alist~ or
 ~display-buffer-base-action~.
 
 *** New option ~org-archive-subtree-save-file-p~
@@ -226,10 +272,6 @@ You can also set this option to =t= or to =from-agenda=.
 
 This option will add a timeout to notifications.
 
-*** New hook ~org-agenda-filter-hook~
-
-Functions in this hook are run after ~org-agenda-filter~ is called.
-
 *** New option ~org-startup-numeroted~
 
 When this option is =t=, Org files will start using ~(org-num-mode 1)~
@@ -238,18 +280,19 @@ and headings will be visually numeroted.
 You can turn this on/off on a per-file basis with =#+startup: num= or
 =#+startup: nonum=.
 
-*** New option ~ob-shell-return-value-is-exit-status~
+*** New option ~org-latex-to-html-convert-command~
 
-When set to =t=, consider the return value of a shell source code
-block is the exit status of its last command.  
+This new option allows you to convert a LaTeX fragment directly into
+HTML.
 
-The default for this option is =nil=, i.e. the return value of a shell
-block is the output of the commands.
+*** New hook ~org-agenda-filter-hook~
 
-You can turn this on individual blocks by setting the header argument
-=:value-is-exit-status= to =t=.
+Functions in this hook are run after ~org-agenda-filter~ is called.
 
 ** Removed or renamed functions and variables
+*** Removed  ~org-maybe-keyword-time-regexp~
+
+The variable was not used in the code base.
 
 *** Renamed ~org-columns-set-tags-or-toggle~
 

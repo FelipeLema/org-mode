@@ -369,6 +369,65 @@ FULL is given."
 (defconst org-dblock-end-re "^[ \t]*#\\+\\(?:END\\|end\\)\\([: \t\r\n]\\|$\\)"
   "Matches the end of a dynamic block.")
 
+;;;; Timestamp
+
+(defconst org-ts--internal-regexp
+  (rx (seq
+       (= 4 digit) "-" (= 2 digit) "-" (= 2 digit)
+       (optional " " (*? nonl))))
+  "Regular expression matching the innards of a time stamp.")
+
+(defconst org-ts-regexp (format "<\\(%s\\)>" org-ts--internal-regexp)
+  "Regular expression for fast time stamp matching.")
+
+(defconst org-ts-regexp-inactive
+  (format "\\[\\(%s\\)\\]" org-ts--internal-regexp)
+  "Regular expression for fast inactive time stamp matching.")
+
+(defconst org-ts-regexp-both (format "[[<]\\(%s\\)[]>]" org-ts--internal-regexp)
+  "Regular expression for fast time stamp matching.")
+
+(defconst org-ts-regexp0
+  "\\(\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)\\( +[^]+0-9>\r\n -]+\\)?\\( +\\([0-9]\\{1,2\\}\\):\\([0-9]\\{2\\}\\)\\)?\\)"
+  "Regular expression matching time strings for analysis.
+This one does not require the space after the date, so it can be used
+on a string that terminates immediately after the date.")
+
+(defconst org-ts-regexp1 "\\(\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\) *\\([^]+0-9>\r\n -]*\\)\\( \\([0-9]\\{1,2\\}\\):\\([0-9]\\{2\\}\\)\\)?\\)"
+  "Regular expression matching time strings for analysis.")
+
+(defconst org-ts-regexp2 (concat "<" org-ts-regexp1 "[^>\n]\\{0,16\\}>")
+  "Regular expression matching time stamps, with groups.")
+
+(defconst org-ts-regexp3 (concat "[[<]" org-ts-regexp1 "[^]>\n]\\{0,16\\}[]>]")
+  "Regular expression matching time stamps (also [..]), with groups.")
+
+(defconst org-tr-regexp (concat org-ts-regexp "--?-?" org-ts-regexp)
+  "Regular expression matching a time stamp range.")
+
+(defconst org-tr-regexp-both
+  (concat org-ts-regexp-both "--?-?" org-ts-regexp-both)
+  "Regular expression matching a time stamp range.")
+
+(defconst org-tsr-regexp (concat org-ts-regexp "\\(--?-?"
+				 org-ts-regexp "\\)?")
+  "Regular expression matching a time stamp or time stamp range.")
+
+(defconst org-tsr-regexp-both
+  (concat org-ts-regexp-both "\\(--?-?"
+	  org-ts-regexp-both "\\)?")
+  "Regular expression matching a time stamp or time stamp range.
+The time stamps may be either active or inactive.")
+
+(defconst org-repeat-re
+  "<[0-9]\\{4\\}-[0-9][0-9]-[0-9][0-9] [^>\n]*?\
+\\([.+]?\\+[0-9]+[hdwmy]\\(/[0-9]+[hdwmy]\\)?\\)"
+  "Regular expression for specifying repeated events.
+After a match, group 1 contains the repeat expression.")
+
+(defconst org-time-stamp-formats '("<%Y-%m-%d %a>" . "<%Y-%m-%d %a %H:%M>")
+  "Formats for `format-time-string' which are used for time stamps.")
+
 ;;;; Clock and Planning
 
 (defconst org-clock-string "CLOCK:"
@@ -460,18 +519,6 @@ Matched keyword is in group 1.")
    " *[[<]\\([^]>]+\\)[]>]")
   "Matches any of the 3 keywords, together with the time stamp.")
 
-(defconst org-maybe-keyword-time-regexp
-  (concat "\\(\\<"
-	  (regexp-opt
-	   (list org-scheduled-string org-deadline-string org-closed-string
-		 org-clock-string)
-	   t)
-	  "\\)?"
-	  " *\\([[<][0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} ?[^]\r\n>]*?[]>]"
-	  "\\|"
-	  "<%%([^\r\n>]*>\\)")
-  "Matches a timestamp, possibly preceded by a keyword.")
-
 (defconst org-all-time-keywords
   (mapcar (lambda (w) (substring w 0 -1))
 	  (list org-scheduled-string org-deadline-string
@@ -497,9 +544,9 @@ Group 1 contains drawer's name or \"END\".")
   "Regular expression matching the last line of a clock drawer.")
 
 (defconst org-logbook-drawer-re
-  (concat "^[ \t]*:LOGBOOK:[ \t]*\n"
-	  "\\(?:[ \t]*.*\\(?: .*\\)?[ \t]*\n\\)*?"
-	  "[ \t]*:END:[ \t]*$")
+  (rx (seq bol (0+ (any "\t ")) ":LOGBOOK:" (0+ (any "\t ")) "\n"
+	   (*? (0+ nonl) "\n")
+	   (0+ (any "\t ")) ":END:" (0+ (any "\t ")) eol))
   "Matches an entire LOGBOOK drawer.")
 
 (defconst org-property-drawer-re
@@ -575,59 +622,6 @@ An entry can be toggled between COMMENT and normal with
   "The property that is being used to keep track of effort estimates.
 Effort estimates given in this property need to be in the format
 defined in org-duration.el.")
-
-;;;; Timestamp
-
-(defconst org-ts-regexp "<\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} ?[^\r\n>]*?\\)>"
-  "Regular expression for fast time stamp matching.")
-
-(defconst org-ts-regexp-inactive
-  "\\[\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} ?[^\r\n>]*?\\)\\]"
-  "Regular expression for fast inactive time stamp matching.")
-
-(defconst org-ts-regexp-both "[[<]\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} ?[^]\r\n>]*?\\)[]>]"
-  "Regular expression for fast time stamp matching.")
-
-(defconst org-ts-regexp0
-  "\\(\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)\\( +[^]+0-9>\r\n -]+\\)?\\( +\\([0-9]\\{1,2\\}\\):\\([0-9]\\{2\\}\\)\\)?\\)"
-  "Regular expression matching time strings for analysis.
-This one does not require the space after the date, so it can be used
-on a string that terminates immediately after the date.")
-
-(defconst org-ts-regexp1 "\\(\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\) *\\([^]+0-9>\r\n -]*\\)\\( \\([0-9]\\{1,2\\}\\):\\([0-9]\\{2\\}\\)\\)?\\)"
-  "Regular expression matching time strings for analysis.")
-
-(defconst org-ts-regexp2 (concat "<" org-ts-regexp1 "[^>\n]\\{0,16\\}>")
-  "Regular expression matching time stamps, with groups.")
-
-(defconst org-ts-regexp3 (concat "[[<]" org-ts-regexp1 "[^]>\n]\\{0,16\\}[]>]")
-  "Regular expression matching time stamps (also [..]), with groups.")
-
-(defconst org-tr-regexp (concat org-ts-regexp "--?-?" org-ts-regexp)
-  "Regular expression matching a time stamp range.")
-
-(defconst org-tr-regexp-both
-  (concat org-ts-regexp-both "--?-?" org-ts-regexp-both)
-  "Regular expression matching a time stamp range.")
-
-(defconst org-tsr-regexp (concat org-ts-regexp "\\(--?-?"
-				 org-ts-regexp "\\)?")
-  "Regular expression matching a time stamp or time stamp range.")
-
-(defconst org-tsr-regexp-both
-  (concat org-ts-regexp-both "\\(--?-?"
-	  org-ts-regexp-both "\\)?")
-  "Regular expression matching a time stamp or time stamp range.
-The time stamps may be either active or inactive.")
-
-(defconst org-repeat-re
-  "<[0-9]\\{4\\}-[0-9][0-9]-[0-9][0-9] [^>\n]*?\
-\\([.+]?\\+[0-9]+[hdwmy]\\(/[0-9]+[hdwmy]\\)?\\)"
-  "Regular expression for specifying repeated events.
-After a match, group 1 contains the repeat expression.")
-
-(defconst org-time-stamp-formats '("<%Y-%m-%d %a>" . "<%Y-%m-%d %a %H:%M>")
-  "Formats for `format-time-string' which are used for time stamps.")
 
 
 ;;; The custom variables
@@ -893,7 +887,7 @@ will still edit the time stamp - this is just too good to give up."
 	  (const :tag "When outside special context" t)
 	  (const :tag "Everywhere except timestamps" always)))
 
-(defcustom org-loop-over-headlines-in-active-region nil
+(defcustom org-loop-over-headlines-in-active-region t
   "Shall some commands act upon headlines in the active region?
 
 When set to t, some commands will be performed in all headlines
@@ -919,7 +913,8 @@ equivalent option for agenda views."
 		 (const :tag "All headlines in active region" t)
 		 (const :tag "In active region, headlines at the same level than the first one" start-level)
 		 (string :tag "Tags/Property/Todo matcher"))
-  :version "24.1"
+  :version "27.1"
+  :package-version "9.4"
   :group 'org-todo
   :group 'org-archive)
 
@@ -2388,7 +2383,8 @@ set a priority."
   :group 'org-priorities
   :type 'boolean)
 
-(defvaralias 'org-highest-priority 'org-priority-highest)
+(defalias 'org-highest-priority 'org-priority-highest)
+
 (defcustom org-priority-highest ?A
   "The highest priority of TODO items.
 A character like ?A, ?B, etc., or a numeric value like 1, 2, etc.
@@ -2398,7 +2394,7 @@ Must be smaller than `org-priority-lowest'."
 	  (character :tag "Character")
 	  (integer :tag "Integer (< 65)")))
 
-(defvaralias 'org-lowest-priority 'org-priority-lowest)
+(defalias 'org-lowest-priority 'org-priority-lowest)
 (defcustom org-priority-lowest ?C
   "The lowest priority of TODO items.
 A character like ?A, ?B, etc., or a numeric value like 1, 2, etc.
@@ -2408,7 +2404,7 @@ Must be higher than `org-priority-highest'."
 	  (character :tag "Character")
 	  (integer :tag "Integer (< 65)")))
 
-(defvaralias 'org-default-priority 'org-priority-default)
+(defalias 'org-default-priority 'org-priority-default)
 (defcustom org-priority-default ?B
   "The default priority of TODO items.
 This is the priority an item gets if no explicit priority is given.
@@ -3203,6 +3199,22 @@ When using LaTeXML set this option to
 	  (const :tag "None" nil)
 	  (string :tag "\nShell command")))
 
+(defcustom org-latex-to-html-convert-command nil
+  "Command to convert LaTeX fragments to HTML.
+This command is very open-ended: the output of the command will
+directly replace the LaTeX fragment in the resulting HTML.
+Replace format-specifiers in the command as noted below and use
+`shell-command' to convert LaTeX to HTML.
+%i:     The LaTeX fragment to be converted.
+
+For example, this could be used with LaTeXML as
+\"latexmlc 'literal:%i' --profile=math --preload=siunitx.sty 2>/dev/null\"."
+  :group 'org-latex
+  :package-version '(Org . "9.4")
+  :type '(choice
+	  (const :tag "None" nil)
+	  (string :tag "Shell command")))
+
 (defcustom org-preview-latex-default-process 'dvipng
   "The default process to convert LaTeX fragments to image files.
 All available processes and theirs documents can be found in
@@ -3531,12 +3543,14 @@ When this is non-nil, the headline after the keyword is set to the
   :type 'boolean
   :safe t)
 
-(defcustom org-fontify-done-headline nil
+(defcustom org-fontify-done-headline t
   "Non-nil means change the face of a headline if it is marked DONE.
 Normally, only the TODO/DONE keyword indicates the state of a headline.
 When this is non-nil, the headline after the keyword is set to the
 `org-headline-done' as an additional indication."
   :group 'org-appearance
+  :version "27.1"
+  :package-version "9.4"
   :type 'boolean)
 
 (defcustom org-fontify-emphasized-text t
@@ -11660,7 +11674,11 @@ in Lisp code use `org-set-tags' instead."
 				#'org-tags-completion-function
 				nil nil (org-make-tag-string current-tags)
 				'org-tags-history)))))))
-	  (org-set-tags tags)))))))
+	  (org-set-tags tags)))))
+    ;; `save-excursion' may not replace the point at the right
+    ;; position.
+    (when (save-excursion (skip-chars-backward "*") (bolp))
+      (forward-char))))
 
 (defun org-align-tags (&optional all)
   "Align tags in current entry.
@@ -15616,6 +15634,10 @@ Some of the options can be changed using the variable
 		    (if (string= (match-string 0 value) "$$")
 			(insert "\\[" (substring value 2 -2) "\\]")
 		      (insert "\\(" (substring value 1 -1) "\\)"))))
+		 ((eq processing-type 'html)
+		  (goto-char beg)
+		  (delete-region beg end)
+		  (insert (org-format-latex-as-html value)))
 		 ((assq processing-type org-preview-latex-process-alist)
 		  ;; Process to an image.
 		  (cl-incf cnt)
@@ -15744,7 +15766,7 @@ inspection."
 	(write-region mathml nil mathml-file))
       (when (called-interactively-p 'any)
 	(message mathml)))
-     ((message "LaTeX to MathML conversion failed")
+     ((warn "LaTeX to MathML conversion failed")
       (message shell-command-output)))
     (delete-file tmp-in-file)
     (when (file-exists-p tmp-out-file)
@@ -15780,6 +15802,14 @@ inspection."
 						'paragraph 'character)))
       ;; Failed conversion.  Return the LaTeX fragment verbatim
       latex-frag)))
+
+(defun org-format-latex-as-html (latex-fragment)
+  "Convert LATEX-FRAGMENT to HTML.
+This uses  `org-latex-to-html-convert-command', which see."
+  (let ((cmd (format-spec org-latex-to-html-convert-command
+			  `((?i . ,latex-fragment)))))
+    (message "Running %s" cmd)
+    (shell-command-to-string cmd)))
 
 (defun org--get-display-dpi ()
   "Get the DPI of the display.
@@ -19792,7 +19822,8 @@ depending on context."
       (if (<= end (point))		;on tags part
 	  (kill-region (point) (line-end-position))
 	(kill-region (point) end)))
-    (org-align-tags))
+    ;; Only align tags when we are still on a heading:
+    (if (org-at-heading-p) (org-align-tags)))
    (t (kill-region (point) (line-end-position)))))
 
 (defun org-yank (&optional arg)
