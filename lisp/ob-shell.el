@@ -82,12 +82,19 @@ This function is called by `org-babel-execute-src-block'."
 	 (value-is-exit-status
 	  (member "value" (cdr (assq :result-params params))))
 	 (cmdline (cdr (assq :cmdline params)))
+	 (shebang (cdr (assq :shebang params)))
+	 (value-is-exit-status
+          (member "value" (cdr (assq :result-params params))))
+	 (padline (not (equal "no" (cdr (assq :padline params)))))
+	 (result-params (cdr (assq :result-params params)))
          (full-body (concat
 		     (org-babel-expand-body:generic
 		      body params (org-babel-variable-assignments:shell params))
 		     (when value-is-exit-status "\necho $?"))))
     (org-babel-reassemble-table
-     (org-babel-sh-evaluate session full-body params stdin cmdline)
+     (org-babel-sh-evaluate session full-body
+			    stdin cmdline shebang value-is-exit-status padline
+			    result-params)
      (org-babel-pick-name
       (cdr (assq :colname-names params)) (cdr (assq :colnames params)))
      (org-babel-pick-name
@@ -206,83 +213,114 @@ var of the same value."
   "String to indicate that evaluation has completed.")
 (defvar org-babel-sh-eoe-output "org_babel_sh_eoe"
   "String to indicate that evaluation has completed.")
+(defvar org-babel-sh-block-function-name "org_babel_block"
+  "Name of the shell function that will hold the code to be executed.")
 
-(defun org-babel-sh-evaluate (session body &optional params stdin cmdline)
-  "Pass BODY to the Shell process in BUFFER.
-If RESULT-TYPE equals `output' then return a list of the outputs
-of the statements in BODY, if RESULT-TYPE equals `value' then
-return the value of the last statement in BODY."
-  (let* ((shebang (cdr (assq :shebang params)))
-	 (value-is-exit-status
-	  (member "value" (cdr (assq :result-params params))))
-	 (results
-	  (cond
-	   ((or stdin cmdline)	       ; external shell script w/STDIN
-	    (let ((script-file (org-babel-temp-file "sh-script-"))
-		  (stdin-file (org-babel-temp-file "sh-stdin-"))
-		  (padline (not (string= "no" (cdr (assq :padline params))))))
-	      (with-temp-file script-file
-		(when shebang (insert shebang "\n"))
-		(when padline (insert "\n"))
-		(insert body))
-	      (set-file-modes script-file #o755)
-	      (with-temp-file stdin-file (insert (or stdin "")))
-	      (with-temp-buffer
-		(process-file-shell-command
-		 (concat
-		  (let ((local-script-file (org-babel-local-file-name
-					    script-file)))
-		    (if shebang local-script-file
-		      (format "%s %s" shell-file-name
-			      local-script-file)))
-		  (and cmdline (concat " " cmdline)))
-		 stdin-file
-		 (current-buffer))
-		(buffer-string))))
-	   (session			; session evaluation
-	    (mapconcat
-	     #'org-babel-sh-strip-weird-long-prompt
-	     (mapcar
-	      #'org-trim
-	      (butlast
-	       (org-babel-comint-with-output
-		   (session org-babel-sh-eoe-output t body)
-		 (dolist (line (append (split-string (org-trim body) "\n")
-				       (list org-babel-sh-eoe-indicator)))
-		   (insert line)
-		   (comint-send-input nil t)
-		   (while (save-excursion
-			    (goto-char comint-last-input-end)
-			    (not (re-search-forward
-				  comint-prompt-regexp nil t)))
-		     (accept-process-output
-		      (get-buffer-process (current-buffer))))))
-	       2))
-	     "\n"))
+(defun org-babel-sh-evaluate (session body
+				      &optional stdin cmdline
+				      shebang value-is-exit-status padline
+				      result-params)
+  "Pass BODY to the Shell process in SESSION.
+
+Optional arguments:
+
+- Send STDIN as stdin in.
+- Extra commandline arguments (such as -f -x -v…) in CMDLINE.
+- Use SHEBANG as interpreter for block (such as \"#!/usr/bin/bash\")
+- When VALUE-IS-EXIT-STATUS, returns the exit status value as a string.
+- Add an extra end-of-line when PADLINE
+- forward RESULT-PARAMS to `org-babel-result-cond'."
+  (let* ((results
+          (cond
+           ((or stdin cmdline)         ; external shell script w/STDIN
+            (let ((script-file (org-babel-temp-file "sh-script-"))
+                  (stdin-file (org-babel-temp-file "sh-stdin-")))
+              (with-temp-file script-file
+                (when shebang (insert shebang "\n"))
+                (when padline (insert "\n"))
+                (insert body))
+              (set-file-modes script-file #o755)
+              (with-temp-file stdin-file (insert (or stdin "")))
+              (with-temp-buffer
+                (process-file-shell-command
+                 (concat
+                  (let ((local-script-file (org-babel-local-file-name
+                                            script-file)))
+                    (if shebang local-script-file
+                      (format "%s %s" shell-file-name
+                              local-script-file)))
+                  (and cmdline (concat " " cmdline)))
+                 stdin-file
+                 (current-buffer))
+                (buffer-string))))
+           (session                     ; session evaluation
+	    (let* ((block-output-lines
+		    (let ((fun-body
+			   (format "%s(){\n%s\n}\n%s"
+				    org-babel-sh-block-function-name
+				    ;; function block
+				    (concat
+				     body
+				     "\n"
+				     org-babel-sh-eoe-indicator) ;; mark eoe
+				    ;; mark "function has been input"
+				    org-babel-sh-eoe-indicator)))
+		      (cl-flet ((send-and-wait ()
+					       (comint-send-input nil t)
+					       (while (save-excursion
+							(goto-char comint-last-input-end)
+							(not (re-search-forward
+							      comint-prompt-regexp nil t)))
+						 (accept-process-output
+						  (get-buffer-process (current-buffer))))))
+			;; define a function with the code we want to eval
+			(org-babel-comint-with-output
+			    (session org-babel-sh-eoe-output t fun-body)
+			  (insert fun-body)
+			  (send-and-wait)) ;; wait until function code is accepted
+			;; now, actually eval the code by calling it as a function
+			(org-babel-comint-with-output
+			    (session org-babel-sh-eoe-output t
+				     org-babel-sh-block-function-name)
+			  (insert org-babel-sh-block-function-name)
+			  (send-and-wait)))))
+		   (block-output-lines-sans-marker-sans-prompt
+		    (thread-first
+			block-output-lines
+		      (car) ;; (list ouput-str prompt-str)
+		      (split-string "\n" t) ;; string lines
+		      (butlast 1))) ;; remove last line with prompt
+		   (block-output-clean-lines
+		    (mapcar #'org-trim
+			    block-output-lines-sans-marker-sans-prompt))
+		   (block-output
+		    (mapconcat
+		     #'org-babel-sh-strip-weird-long-prompt
+		     block-output-clean-lines "\n")))
+	      block-output))
 	   ;; External shell script, with or without a predefined
-	   ;; shebang.
-	   ((org-string-nw-p shebang)
-	    (let ((script-file (org-babel-temp-file "sh-script-"))
-		  (padline (not (equal "no" (cdr (assq :padline params))))))
-	      (with-temp-file script-file
-		(insert shebang "\n")
-		(when padline (insert "\n"))
-		(insert body))
-	      (set-file-modes script-file #o755)
-	      ;; (maybe remotely) run this script as a command
-	      (org-babel-eval (org-babel-local-file-name script-file) "")))
-	   (t (org-babel-eval
-	       shell-file-name
-	       (org-trim body))))))
+           ;; shebang.
+           ((org-string-nw-p shebang)
+            (let ((script-file (org-babel-temp-file "sh-script-")))
+              (with-temp-file script-file
+                (insert shebang "\n")
+                (when padline (insert "\n"))
+                (insert body))
+              (set-file-modes script-file #o755)
+              ;; (maybe remotely) run this script as a command
+              (org-babel-eval (org-babel-local-file-name script-file) "")))
+           (t (org-babel-eval
+               shell-file-name
+               (org-trim body))))))
     (when value-is-exit-status
+      ;; last line is the output of "echo $?"
       (setq results (car (reverse (split-string results "\n" t)))))
     (when results
-      (let ((result-params (cdr (assq :result-params params))))
-        (org-babel-result-cond result-params
+      (org-babel-result-cond result-params
           results
           (let ((tmp-file (org-babel-temp-file "sh-")))
             (with-temp-file tmp-file (insert results))
-            (org-babel-import-elisp-from-file tmp-file)))))))
+            (org-babel-import-elisp-from-file tmp-file))))))
 
 (defun org-babel-sh-strip-weird-long-prompt (string)
   "Remove prompt cruft from a string of shell output."
