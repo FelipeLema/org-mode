@@ -42,7 +42,6 @@
 (declare-function org-id-find-id-file "org-id" (id))
 (declare-function htmlize-region "ext:htmlize" (beg end))
 (declare-function mm-url-decode-entities "mm-url" ())
-(declare-function org-attach-link-expand "org-attach" (link &optional buffer-or-name))
 
 (defvar htmlize-css-name-prefix)
 (defvar htmlize-output-type)
@@ -776,6 +775,8 @@ e.g. \"tex:mathjax\".  Allowed values are:
   `verbatim'    Keep everything in verbatim
   `mathjax', t  Do MathJax preprocessing and arrange for MathJax.js to
                 be loaded.
+  `html'        Use `org-latex-to-html-convert-command' to convert
+                LaTeX fragments to HTML.
   SYMBOL        Any symbol defined in `org-preview-latex-process-alist',
                 e.g., `dvipng'."
   :group 'org-export-html
@@ -814,7 +815,6 @@ link to the image."
 
 (defcustom org-html-inline-image-rules
   `(("file" . ,(regexp-opt '(".jpeg" ".jpg" ".png" ".gif" ".svg")))
-    ("attachment" . ,(regexp-opt '(".jpeg" ".jpg" ".png" ".gif" ".svg")))
     ("http" . ,(regexp-opt '(".jpeg" ".jpg" ".png" ".gif" ".svg")))
     ("https" . ,(regexp-opt '(".jpeg" ".jpg" ".png" ".gif" ".svg"))))
   "Rules characterizing image files that can be inlined into HTML.
@@ -2771,12 +2771,13 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
 (defun org-html-format-latex (latex-frag processing-type info)
   "Format a LaTeX fragment LATEX-FRAG into HTML.
 PROCESSING-TYPE designates the tool used for conversion.  It can
-be `mathjax', `verbatim', nil, t or symbols in
+be `mathjax', `verbatim', `html', nil, t or symbols in
 `org-preview-latex-process-alist', e.g., `dvipng', `dvisvgm' or
 `imagemagick'.  See `org-html-with-latex' for more information.
 INFO is a plist containing export properties."
   (let ((cache-relpath "") (cache-dir ""))
-    (unless (eq processing-type 'mathjax)
+    (unless (or (eq processing-type 'mathjax)
+                (eq processing-type 'html))
       (let ((bfn (or (buffer-file-name)
 		     (make-temp-name
 		      (expand-file-name "latex" temporary-file-directory))))
@@ -2890,6 +2891,8 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
     (cond
      ((memq processing-type '(t mathjax))
       (org-html-format-latex latex-frag 'mathjax info))
+     ((memq processing-type '(t html))
+      (org-html-format-latex latex-frag 'html info))
      ((assq processing-type org-preview-latex-process-alist)
       (let ((formula-link
 	     (org-html-format-latex latex-frag processing-type info)))
@@ -2996,9 +2999,7 @@ INFO is a plist holding contextual information.  See
 	  (cond
 	   ((member type '("http" "https" "ftp" "mailto" "news"))
 	    (url-encode-url (concat type ":" raw-path)))
-	   ((member type '("file" "attachment"))
-	    (when (string= type "attachment")
-	      (setq raw-path (org-attach-link-expand link)))
+	   ((string= "file" type)
 	    ;; During publishing, turn absolute file names belonging
 	    ;; to base directory into relative file names.  Otherwise,
 	    ;; append "file" protocol to absolute file name.

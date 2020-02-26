@@ -75,7 +75,6 @@
 (declare-function org-src-source-type "org-src" ())
 (declare-function org-time-stamp-format "org" (&optional long inactive))
 (declare-function outline-next-heading "outline" ())
-(declare-function org-attach-link-expand "org-attach" (link &optional buffer-or-name))
 
 
 ;;; Customization
@@ -1027,9 +1026,7 @@ for internal and \"file\" links, or stored as a parameter in
     (pcase type
       ;; Opening a "file" link requires special treatment since we
       ;; first need to integrate search option, if any.
-      ((or "file" "attachment")
-       (when (string= type "attachment")
-	 (setq path (org-attach-link-expand link)))
+      ("file"
        (let* ((option (org-element-property :search-option link))
 	      (path (if option (concat path "::" option) path)))
 	 (org-link-open-as-file path
@@ -1195,7 +1192,7 @@ of matched result, which is either `dedicated' or `fuzzy'."
 		 (when (equal words
 			      (split-string
 			       (replace-regexp-in-string
-				cookie-re ""
+				cookie-re " "
 				(replace-regexp-in-string
 				 comment-re "" (org-get-heading t t t)))))
 		   (throw :found t)))
@@ -1261,10 +1258,8 @@ into a single one."
 	     (unless (string-prefix-p "*" s) (setq s (concat "*" s)))
 	     (replace-regexp-in-string comment-re "" s))))
 	(cookie-re "\\[[0-9]*\\(?:%\\|/[0-9]*\\)\\]"))
-    (org-trim
-     (replace-regexp-in-string
-      cookie-re ""
-      (org-link--squeeze-white-spaces context)))))
+    (org-link--squeeze-white-spaces
+     (replace-regexp-in-string cookie-re " " context))))
 
 (defun org-link-open-as-file (path arg)
   "Pretend PATH is a file name and open it.
