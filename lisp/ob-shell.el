@@ -83,8 +83,6 @@ This function is called by `org-babel-execute-src-block'."
 	  (member "value" (cdr (assq :result-params params))))
 	 (cmdline (cdr (assq :cmdline params)))
 	 (shebang (cdr (assq :shebang params)))
-	 (value-is-exit-status
-          (member "value" (cdr (assq :result-params params))))
 	 (padline (not (equal "no" (cdr (assq :padline params)))))
 	 (result-params (cdr (assq :result-params params)))
          (full-body (concat
